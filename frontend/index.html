@@ -20,7 +20,7 @@
         margin: auto;
         background: #111;
         display: grid;
-        grid-template-columns: 1fr 300px;
+        grid-template-columns: 1fr 320px;
         gap: 32px;
     }
 
@@ -28,32 +28,16 @@
         grid-column: 1 / 3;
         font-size: 20px;
         letter-spacing: 0.5px;
-        margin-bottom: 20px;
+        margin-bottom: 8px;
         color: #aaa;
         text-transform: uppercase;
     }
 
-    .inputRow {
+    #subtitle {
         grid-column: 1 / 3;
-        display: flex;
-        gap: 12px;
-        margin-bottom: 24px;
-    }
-
-    input {
-        flex: 1;
-        padding: 10px;
-        background: #000;
-        border: 1px solid #333;
-        color: #e5e5e5;
-    }
-
-    button {
-        padding: 10px 18px;
-        background: #222;
-        border: 1px solid #444;
-        color: #e5e5e5;
-        cursor: pointer;
+        font-size: 13px;
+        color: #777;
+        margin-bottom: 20px;
     }
 
     #configPanel {
@@ -74,22 +58,36 @@
 
     #configBox {
         width: 100%;
-        height: 200px;
+        height: 220px;
         background: #000;
         border: 1px solid #333;
         color: #d0d0d0;
         padding: 12px;
         font-family: "JetBrains Mono", monospace;
-        font-size: 14px;
+        font-size: 13px;
         white-space: pre;
-        overflow-y: scroll;
+        overflow-y: auto;
+    }
+
+    button {
+        padding: 10px 18px;
+        background: #222;
+        border: 1px solid #444;
+        color: #e5e5e5;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+    button:disabled {
+        opacity: 0.5;
+        cursor: default;
     }
 
     .label {
         color: #777;
-        margin-top: 20px;
+        margin-top: 18px;
         margin-bottom: 6px;
-        font-size: 13px;
+        font-size: 12px;
         text-transform: uppercase;
         letter-spacing: 0.6px;
     }
@@ -97,10 +95,25 @@
     .mono {
         white-space: pre-wrap;
         font-family: "JetBrains Mono", monospace;
-        font-size: 14px;
+        font-size: 13px;
         line-height: 1.45;
         color: #d0d0d0;
     }
+
+    .pill {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        border: 1px solid #444;
+        margin-right: 6px;
+    }
+
+    .pill-tighten { border-color: #ffb347; color: #ffb347; }
+    .pill-immune  { border-color: #7fd1b9; color: #7fd1b9; }
+    .pill-relax   { border-color: #f47171; color: #f47171; }
 
     canvas {
         width: 100%;
@@ -116,6 +129,18 @@
         color: #666;
         margin-top: 4px;
     }
+
+    #statusBar {
+        grid-column: 1 / 3;
+        font-size: 12px;
+        color: #666;
+        margin-top: 8px;
+        min-height: 16px;
+    }
+
+    #statusBar span {
+        color: #9ad;
+    }
 </style>
 </head>
 
@@ -127,10 +152,11 @@
 
 <div id="frame">
     <div id="title">IronHalo — Constitutional Governance Demo</div>
+    <div id="subtitle">Paste any cloud config (AWS, Azure, GCP, Kubernetes, etc.). IronHalo will detect misconfig and enforce the clause.</div>
 
     <!-- Cloud Config Panel -->
     <div id="configPanel">
-        <div id="configTitle">Cloud Configuration File (Modify anything — IronHalo will govern it)</div>
+        <div id="configTitle">Universal Cloud Configuration</div>
         <div id="configBox" contenteditable="true">
 # AWS S3
 resource "aws_s3_bucket" "public" {
@@ -158,25 +184,29 @@ firewall:
 # Universal override attempt
 allow_override = true
         </div>
-        <button style="margin-top: 12px;" onclick="sendConfig()">Submit Config</button>
+        <div style="margin-top: 10px; display:flex; gap:10px; align-items:center;">
+            <button id="governBtn" onclick="sendConfig()">Submit Config to IronHalo</button>
+            <span style="font-size:12px; color:#666;">IronHalo will detect misconfig, tighten the perimeter, and log forensics.</span>
+        </div>
     </div>
 
     <!-- Intelligence Output -->
     <div>
-        <div class="label">Ruling</div>
-        <div id="ruling" class="mono">Awaiting input…</div>
+        <div class="label">Clause & Decision</div>
+        <div id="clause" class="mono">Awaiting input…</div>
 
-        <div class="label">Boundary State</div>
+        <div class="label">Boundary State & Pattern</div>
         <div id="boundary" class="mono">—</div>
-
-        <div class="label">Pattern Detected</div>
-        <div id="pattern" class="mono">—</div>
 
         <div class="label">Replay Token</div>
         <div id="token" class="mono">—</div>
 
-        <button onclick="showForensics()" style="margin-top:12px;">View Forensic Log</button>
-        <div id="forensics" class="mono" style="display:none; margin-top:12px; white-space:pre;"></div>
+        <div class="label">Rationale</div>
+        <div id="rationale" class="mono">—</div>
+
+        <div class="label">Forensics Log</div>
+        <button onclick="toggleForensics()" style="margin-bottom:6px;">Toggle Forensic Log</button>
+        <div id="forensics" class="mono" style="display:none; margin-top:6px; white-space:pre;"></div>
     </div>
 
     <!-- Visual Intelligence -->
@@ -195,52 +225,123 @@ allow_override = true
             <span>Relax</span>
         </div>
     </div>
+
+    <div id="statusBar">Status: <span>Idle</span></div>
 </div>
 
 <script>
 let driftHistory = [];
 let intentValue = 0;
-let perimeterState = 0;
+let perimeterState = 1;
+let forensicsVisible = false;
 
-async function sendConfig() {
-    const config = document.getElementById("configBox").innerText;
+// Use your deployed backend URL here:
+const ENGINE_BASE = "https://ironhalo-engine.onrender.com";
+// For local testing: const ENGINE_BASE = "http://localhost:8000";
 
-    const response = await fetch("https://ironhalo-engine.onrender.com/config-strike", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config_text: config })
-    });
-
-    const data = await response.json();
-    updateUI(data);
+function setStatus(text) {
+    document.querySelector("#statusBar span").textContent = text;
 }
 
-async function showForensics() {
-    const box = document.getElementById("forensics");
+function classifyPerimeterPill(boundary_state) {
+    const lower = (boundary_state || "").toString().toLowerCase();
+    if (lower.includes("tight") || lower.includes("lock") || lower.includes("deny")) return "tighten";
+    if (lower.includes("relax") || lower.includes("allow")) return "relax";
+    return "immune";
+}
 
-    if (box.style.display === "block") {
+async function sendConfig() {
+    const btn = document.getElementById("governBtn");
+    const config = document.getElementById("configBox").innerText.trim();
+    if (!config) return;
+
+    btn.disabled = true;
+    setStatus("Sending config to IronHalo…");
+
+    try {
+        const response = await fetch(ENGINE_BASE + "/config-strike", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config_text: config })
+        });
+
+        if (!response.ok) {
+            setStatus("Backend error: " + response.status);
+            btn.disabled = false;
+            return;
+        }
+
+        const data = await response.json();
+        updateUI(data);
+        setStatus("Ruling received from IronHalo.");
+    } catch (err) {
+        setStatus("Network error talking to IronHalo.");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function toggleForensics() {
+    const box = document.getElementById("forensics");
+    forensicsVisible = !forensicsVisible;
+
+    if (!forensicsVisible) {
         box.style.display = "none";
         box.textContent = "";
         return;
     }
 
-    const response = await fetch("https://ironhalo-engine.onrender.com/forensics");
-    const data = await response.json();
-    box.style.display = "block";
-    box.textContent = JSON.stringify(data, null, 2);
+    setStatus("Fetching forensics…");
+
+    try {
+        const response = await fetch(ENGINE_BASE + "/forensics");
+        if (!response.ok) {
+            setStatus("Backend error fetching forensics: " + response.status);
+            return;
+        }
+        const data = await response.json();
+        box.style.display = "block";
+        box.textContent = JSON.stringify(data, null, 2);
+        setStatus("Forensics loaded.");
+    } catch (err) {
+        setStatus("Network error fetching forensics.");
+    }
 }
 
 function updateUI(data) {
-    document.getElementById("ruling").textContent = data.rationale || "—";
-    document.getElementById("boundary").textContent = data.boundary_state || "—";
-    document.getElementById("pattern").textContent = data.pattern_detected || "—";
-    document.getElementById("token").textContent = data.replay_token || "—";
+    const clauseId = data.clause_id || "—";
+    const clauseTitle = data.clause_title || "";
+    const decision = data.decision || data.boundary_state || "—";
 
-    driftHistory.push(Math.random());
+    let clauseText = "";
+    if (clauseId !== "—" || clauseTitle) {
+        clauseText += `[${clauseId}] ${clauseTitle}\n`;
+    }
+    clauseText += `Decision: ${decision}`;
+    document.getElementById("clause").textContent = clauseText || "—";
+
+    const boundaryState = data.boundary_state || decision || "—";
+    const pattern = data.pattern_detected || "—";
+    const pillClass = classifyPerimeterPill(boundaryState);
+
+    document.getElementById("boundary").innerHTML =
+        `<span class="pill pill-${pillClass}">${boundaryState}</span>` +
+        `Pattern: ${pattern}`;
+
+    document.getElementById("token").textContent = data.replay_token || "—";
+    document.getElementById("rationale").textContent = data.rationale || "—";
+
+    const driftValue = typeof data.drift_value === "number" ? data.drift_value : Math.random();
+    const intent = typeof data.intent_strength === "number" ? data.intent_strength : Math.random();
+    const perimeterIndex = typeof data.perimeter_index === "number"
+        ? data.perimeter_index
+        : (pillClass === "tighten" ? 0 : pillClass === "relax" ? 2 : 1);
+
+    driftHistory.push(Math.max(0, Math.min(1, driftValue)));
     if (driftHistory.length > 60) driftHistory.shift();
 
-    intentValue = Math.random();
-    perimeterState = Math.floor(Math.random() * 3);
+    intentValue = Math.max(0, Math.min(1, intent));
+    perimeterState = Math.max(0, Math.min(2, perimeterIndex));
 
     drawDrift();
     drawIntent();

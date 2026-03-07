@@ -1,12 +1,13 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from demo_governance.engine import run_governed_strike, run_config_strike
-import time
-import hashlib
+from pydantic import BaseModel
+from typing import List, Dict, Any
+from datetime import datetime
+import uuid
 
-app = FastAPI(title="IronHalo Demo Backend")
+app = FastAPI(title="IronHalo Engine Demo")
 
+# Allow frontend to call backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,102 +15,112 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -----------------------------
-# Request / Response Models
-# -----------------------------
-
-class StrikeRequest(BaseModel):
-    clause_id: str
-    deviation_summary: str
-
-class ConfigRequest(BaseModel):
+class ConfigStrikeRequest(BaseModel):
     config_text: str
 
-class StrikeResponse(BaseModel):
-    clause_id: str
-    clause_title: str
-    decision: str
-    rationale: str
-    replay_token: str
-    boundary_state: str
-    pattern_detected: str
-    pattern_consequence: str
+# In‑memory forensic log
+forensic_log: List[Dict[str, Any]] = []
+
 
 # -----------------------------
-# Forensics Log
+# Pattern Detection Logic
 # -----------------------------
+def detect_pattern(config_text: str) -> Dict[str, Any]:
+    text = config_text.lower()
+    patterns = []
 
-EVENT_LOG = []
+    # AWS
+    if "aws_s3_bucket" in text and "public-read" in text:
+        patterns.append("aws_public_s3")
 
-def compute_drift_signature(text: str) -> str:
-    """
-    Simple drift signature:
-    Hash of the text (verbs/negations would be extracted in a full engine).
-    """
-    return hashlib.sha256(text.encode()).hexdigest()[:16]  # short fingerprint
+    # Azure
+    if "networksecuritygroup" in text and "sourceaddressprefix" in text and '"*"' in text:
+        patterns.append("azure_open_nsg")
 
-# -----------------------------
-# Health Check
-# -----------------------------
+    # GCP
+    if "firewall" in text and "0.0.0.0/0" in text:
+        patterns.append("gcp_open_firewall")
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+    # Universal override attempt
+    if "allow_override" in text or "override" in text:
+        patterns.append("universal_override_attempt")
 
-# -----------------------------
-# Strike Endpoint
-# -----------------------------
+    # No misconfig
+    if not patterns:
+        patterns.append("no_obvious_misconfig")
 
-@app.post("/strike", response_model=StrikeResponse)
-def strike(req: StrikeRequest):
-    result = run_governed_strike(req.clause_id, req.deviation_summary)
+    # Clause selection
+    if "universal_override_attempt" in patterns:
+        clause_id = "Clause 7"
+        clause_title = "Universal Override Immunity"
+        decision = "DENY"
+        boundary_state = "TIGHTEN"
+        drift_severity = "HIGH"
+        rationale = "Detected explicit override attempt against perimeter constraints."
 
-    drift_sig = compute_drift_signature(req.deviation_summary)
+    elif any(p in patterns for p in ["aws_public_s3", "azure_open_nsg", "gcp_open_firewall"]):
+        clause_id = "Clause 3"
+        clause_title = "Public Surface Minimization"
+        decision = "DENY"
+        boundary_state = "TIGHTEN"
+        drift_severity = "MEDIUM"
+        rationale = "Detected public exposure of critical surface across one or more cloud providers."
 
-    EVENT_LOG.append({
-        "timestamp": time.time(),
-        "type": "strike",
-        "input": {
-            "clause_id": req.clause_id,
-            "deviation_summary": req.deviation_summary
-        },
-        "output": result,
-        "drift_signature": drift_sig,
-        "boundary_state": result.boundary_state,
-        "pattern_detected": result.pattern_detected,
-        "replay_token": result.replay_token
-    })
+    else:
+        clause_id = "Clause 1"
+        clause_title = "Baseline Constitutional Readiness"
+        decision = "ALLOW"
+        boundary_state = "IMMUNE"
+        drift_severity = "LOW"
+        rationale = "No material misconfiguration detected relative to current perimeter."
 
-    return result
+    return {
+        "patterns": patterns,
+        "clause_id": clause_id,
+        "clause_title": clause_title,
+        "decision": decision,
+        "boundary_state": boundary_state,
+        "drift_severity": drift_severity,
+        "rationale": rationale,
+    }
 
-# -----------------------------
-# Config Strike Endpoint
-# -----------------------------
-
-@app.post("/config-strike", response_model=StrikeResponse)
-def config_strike(req: ConfigRequest):
-    result = run_config_strike(req.config_text)
-
-    drift_sig = compute_drift_signature(req.config_text)
-
-    EVENT_LOG.append({
-        "timestamp": time.time(),
-        "type": "config-strike",
-        "input": req.config_text,
-        "output": result,
-        "drift_signature": drift_sig,
-        "boundary_state": result.boundary_state,
-        "pattern_detected": result.pattern_detected,
-        "replay_token": result.replay_token
-    })
-
-    return result
 
 # -----------------------------
-# Forensics Endpoint
+# /config-strike
 # -----------------------------
+@app.post("/config-strike")
+def config_strike(req: ConfigStrikeRequest):
+    analysis = detect_pattern(req.config_text)
 
+    replay_token = str(uuid.uuid4())[:8]
+    drift_value = 0.7 if analysis["boundary_state"] == "TIGHTEN" else 0.2
+    intent_strength = 0.8 if "override" in req.config_text.lower() else 0.4
+    perimeter_index = 0 if analysis["boundary_state"] == "TIGHTEN" else 1
+
+    event = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "clause_id": analysis["clause_id"],
+        "clause_title": analysis["clause_title"],
+        "decision": analysis["decision"],
+        "boundary_state": analysis["boundary_state"],
+        "pattern_detected": ", ".join(analysis["patterns"]),
+        "rationale": analysis["rationale"],
+        "replay_token": replay_token,
+        "drift_value": drift_value,
+        "intent_strength": intent_strength,
+        "perimeter_index": perimeter_index,
+    }
+
+    forensic_log.append(event)
+    if len(forensic_log) > 100:
+        forensic_log.pop(0)
+
+    return event
+
+
+# -----------------------------
+# /forensics
+# -----------------------------
 @app.get("/forensics")
-def forensics():
-    # Return the last 50 events
-    return EVENT_LOG[-50:]
+def get_forensics():
+    return {"events": forensic_log}
