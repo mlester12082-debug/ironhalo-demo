@@ -1,409 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>IronHalo — Constitutional Governance Demo</title>
-
-<style>
+  <meta charset="UTF-8" />
+  <title>IronHalo — Constitutional Governance Demo</title>
+  <style>
     body {
-        background: #0d0d0d;
-        color: #e5e5e5;
-        font-family: "Inter", sans-serif;
-        margin: 0;
-        padding: 40px;
+      font-family: system-ui, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      margin: 0;
+      padding: 40px;
     }
 
-    #frame {
-        border: 1px solid #333;
-        padding: 24px;
-        max-width: 1100px;
-        margin: auto;
-        background: #111;
-        display: grid;
-        grid-template-columns: 1fr 320px;
-        gap: 32px;
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
     }
 
-    #title {
-        grid-column: 1 / 3;
-        font-size: 20px;
-        letter-spacing: 0.5px;
-        margin-bottom: 8px;
-        color: #aaa;
-        text-transform: uppercase;
-    }
-
-    #subtitle {
-        grid-column: 1 / 3;
-        font-size: 13px;
-        color: #777;
-        margin-bottom: 20px;
-    }
-
-    #configPanel {
-        grid-column: 1 / 3;
-        background: #0a0a0a;
-        border: 1px solid #333;
-        padding: 16px;
-        margin-bottom: 24px;
-    }
-
-    #configTitle {
-        font-size: 14px;
-        color: #888;
-        margin-bottom: 8px;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-    }
-
-    #configBox {
-        width: 100%;
-        height: 220px;
-        background: #000;
-        border: 1px solid #333;
-        color: #d0d0d0;
-        padding: 12px;
-        font-family: "JetBrains Mono", monospace;
-        font-size: 13px;
-        white-space: pre;
-        overflow-y: auto;
+    textarea {
+      width: 100%;
+      height: 260px;
+      background: #161b22;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      padding: 12px;
+      font-size: 14px;
+      border-radius: 6px;
+      resize: vertical;
     }
 
     button {
-        padding: 10px 18px;
-        background: #222;
-        border: 1px solid #444;
-        color: #e5e5e5;
-        cursor: pointer;
-        font-size: 13px;
+      margin-top: 16px;
+      padding: 12px 20px;
+      background: #238636;
+      border: none;
+      color: white;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
     }
 
-    button:disabled {
-        opacity: 0.5;
-        cursor: default;
+    #result {
+      margin-top: 30px;
+      padding: 20px;
+      border-radius: 6px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      white-space: pre-wrap;
     }
 
-    .label {
-        color: #777;
-        margin-top: 18px;
-        margin-bottom: 6px;
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-    }
+    .allow { border-left: 6px solid #2ea043; }
+    .relax { border-left: 6px solid #1f6feb; }
+    .deny  { border-left: 6px solid #da3633; }
+    .neutral { border-left: 6px solid #8b949e; }
 
-    .mono {
-        white-space: pre-wrap;
-        font-family: "JetBrains Mono", monospace;
-        font-size: 13px;
-        line-height: 1.45;
-        color: #d0d0d0;
+    #loading {
+      display: none;
+      margin-top: 20px;
+      font-style: italic;
     }
-
-    .pill {
-        display: inline-block;
-        padding: 3px 8px;
-        border-radius: 999px;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        border: 1px solid #444;
-        margin-right: 6px;
-    }
-
-    .pill-tighten { border-color: #ffb347; color: #ffb347; }
-    .pill-immune  { border-color: #7fd1b9; color: #7fd1b9; }
-    .pill-relax   { border-color: #f47171; color: #f47171; }
-
-    canvas {
-        width: 100%;
-        height: 80px;
-        background: #000;
-        border: 1px solid #333;
-    }
-
-    .perimeter-labels {
-        display: flex;
-        justify-content: space-between;
-        font-size: 11px;
-        color: #666;
-        margin-top: 4px;
-    }
-
-    #statusBar {
-        grid-column: 1 / 3;
-        font-size: 12px;
-        color: #666;
-        margin-top: 8px;
-        min-height: 16px;
-    }
-
-    #statusBar span {
-        color: #9ad;
-    }
-</style>
+  </style>
 </head>
 
 <body>
+  <h1>IronHalo — Constitutional Governance Demo</h1>
+  <p>Paste any cloud config (AWS, Azure, GCP, Kubernetes, etc.). IronHalo will detect misconfig and enforce the clause.</p>
 
-<div style="text-align:center; margin-bottom:20px; color:#888; font-size:16px;">
-    IronHalo is a perimeter intelligence that adapts to your behavior in real time.
-</div>
+  <form id="config-form">
+    <textarea id="config-input" placeholder="Paste your cloud config here..."></textarea>
+    <button type="submit">Submit Config to IronHalo</button>
+  </form>
 
-<div id="frame">
-    <div id="title">IronHalo — Constitutional Governance Demo</div>
-    <div id="subtitle">Paste any cloud config (AWS, Azure, GCP, Kubernetes, etc.). IronHalo will detect misconfig and enforce the clause.</div>
+  <div id="loading">Analyzing perimeter intent…</div>
+  <div id="result"></div>
 
-    <!-- Cloud Config Panel -->
-    <div id="configPanel">
-        <div id="configTitle">Universal Cloud Configuration</div>
-        <div id="configBox" contenteditable="true">
-# AWS S3
-resource "aws_s3_bucket" "public" {
-  acl = "public-read"
-}
+  <script>
+    // --- SANITIZATION FIX ---
+    // Removes ANY line containing "override" (case-insensitive)
+    function sanitizeConfig(raw) {
+      return raw
+        .split("\n")
+        .filter(line => !line.toLowerCase().includes("override"))
+        .join("\n");
+    }
 
-# Azure NSG
-networkSecurityGroup:
-  - name: openNSG
-    properties:
-      securityRules:
-        - access: Allow
-          direction: Inbound
-          sourceAddressPrefix: "*"
-          destinationPortRange: "22"
+    document.getElementById("config-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
 
-# GCP Firewall
-firewall:
-  - name: allow-all
-    allowed:
-      - IPProtocol: "tcp"
-        ports: ["80"]
-    sourceRanges: ["0.0.0.0/0"]
+      const input = document.getElementById("config-input");
+      const resultBox = document.getElementById("result");
+      const spinner = document.getElementById("loading");
 
-# Universal override attempt
-allow_override = true
-        </div>
-        <div style="margin-top: 10px; display:flex; gap:10px; align-items:center;">
-            <button id="governBtn" onclick="sendConfig()">Submit Config to IronHalo</button>
-            <span style="font-size:12px; color:#666;">IronHalo will detect misconfig, tighten the perimeter, and log forensics.</span>
-        </div>
-    </div>
+      const rawConfig = input.value;
+      const cleanedConfig = sanitizeConfig(rawConfig);
 
-    <!-- Intelligence Output -->
-    <div>
-        <div class="label">Clause & Decision</div>
-        <div id="clause" class="mono">Awaiting input…</div>
+      resultBox.textContent = "";
+      resultBox.className = "";
+      spinner.style.display = "block";
 
-        <div class="label">Boundary State & Pattern</div>
-        <div id="boundary" class="mono">—</div>
-
-        <div class="label">Replay Token</div>
-        <div id="token" class="mono">—</div>
-
-        <div class="label">Rationale</div>
-        <div id="rationale" class="mono">—</div>
-
-        <div class="label">Forensics Log</div>
-        <button onclick="toggleForensics()" style="margin-bottom:6px;">Toggle Forensic Log</button>
-        <div id="forensics" class="mono" style="display:none; margin-top:6px; white-space:pre;"></div>
-    </div>
-
-    <!-- Visual Intelligence -->
-    <div>
-        <div class="label">Drift Line</div>
-        <canvas id="driftCanvas"></canvas>
-
-        <div class="label">Intent Vector</div>
-        <canvas id="intentCanvas"></canvas>
-
-        <div class="label">Perimeter Cycle</div>
-        <canvas id="perimeterCanvas"></canvas>
-        <div class="perimeter-labels">
-            <span>Tighten</span>
-            <span>Immune</span>
-            <span>Relax</span>
-        </div>
-    </div>
-
-    <div id="statusBar">Status: <span>Idle</span></div>
-</div>
-
-<script>
-let driftHistory = [];
-let intentValue = 0;
-let perimeterState = 1;
-let forensicsVisible = false;
-
-// Use your deployed backend URL here:
-const ENGINE_BASE = "https://ironhalo-engine.onrender.com";
-// For local testing: const ENGINE_BASE = "http://localhost:8000";
-
-function setStatus(text) {
-    document.querySelector("#statusBar span").textContent = text;
-}
-
-function classifyPerimeterPill(boundary_state) {
-    const lower = (boundary_state || "").toString().toLowerCase();
-    if (lower.includes("tight") || lower.includes("lock") || lower.includes("deny")) return "tighten";
-    if (lower.includes("relax") || lower.includes("allow")) return "relax";
-    return "immune";
-}
-
-async function sendConfig() {
-    const btn = document.getElementById("governBtn");
-    const config = document.getElementById("configBox").innerText.trim();
-    if (!config) return;
-
-    btn.disabled = true;
-    setStatus("Sending config to IronHalo…");
-
-    try {
-        const response = await fetch(ENGINE_BASE + "/config-strike", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ config_text: config })
+      try {
+        const response = await fetch("/config-strike", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config: cleanedConfig })
         });
 
-        if (!response.ok) {
-            setStatus("Backend error: " + response.status);
-            btn.disabled = false;
-            return;
-        }
-
         const data = await response.json();
-        updateUI(data);
-        setStatus("Ruling received from IronHalo.");
-    } catch (err) {
-        setStatus("Network error talking to IronHalo.");
-    } finally {
-        btn.disabled = false;
-    }
-}
+        spinner.style.display = "none";
 
-async function toggleForensics() {
-    const box = document.getElementById("forensics");
-    forensicsVisible = !forensicsVisible;
-
-    if (!forensicsVisible) {
-        box.style.display = "none";
-        box.textContent = "";
-        return;
-    }
-
-    setStatus("Fetching forensics…");
-
-    try {
-        const response = await fetch(ENGINE_BASE + "/forensics");
-        if (!response.ok) {
-            setStatus("Backend error fetching forensics: " + response.status);
-            return;
+        if (data.error) {
+          resultBox.textContent = "Error: " + data.error;
+          resultBox.className = "deny";
+        } else {
+          resultBox.textContent = `[Clause ${data.clause}] ${data.ruling}\n\n${data.rationale || ""}`;
+          resultBox.className = data.ruling.toLowerCase();
         }
-        const data = await response.json();
-        box.style.display = "block";
-        box.textContent = JSON.stringify(data, null, 2);
-        setStatus("Forensics loaded.");
-    } catch (err) {
-        setStatus("Network error fetching forensics.");
-    }
-}
-
-function updateUI(data) {
-    const clauseId = data.clause_id || "—";
-    const clauseTitle = data.clause_title || "";
-    const decision = data.decision || data.boundary_state || "—";
-
-    let clauseText = "";
-    if (clauseId !== "—" || clauseTitle) {
-        clauseText += `[${clauseId}] ${clauseTitle}\n`;
-    }
-    clauseText += `Decision: ${decision}`;
-    document.getElementById("clause").textContent = clauseText || "—";
-
-    const boundaryState = data.boundary_state || decision || "—";
-    const pattern = data.pattern_detected || "—";
-    const pillClass = classifyPerimeterPill(boundaryState);
-
-    document.getElementById("boundary").innerHTML =
-        `<span class="pill pill-${pillClass}">${boundaryState}</span>` +
-        `Pattern: ${pattern}`;
-
-    document.getElementById("token").textContent = data.replay_token || "—";
-    document.getElementById("rationale").textContent = data.rationale || "—";
-
-    const driftValue = typeof data.drift_value === "number" ? data.drift_value : Math.random();
-    const intent = typeof data.intent_strength === "number" ? data.intent_strength : Math.random();
-    const perimeterIndex = typeof data.perimeter_index === "number"
-        ? data.perimeter_index
-        : (pillClass === "tighten" ? 0 : pillClass === "relax" ? 2 : 1);
-
-    driftHistory.push(Math.max(0, Math.min(1, driftValue)));
-    if (driftHistory.length > 60) driftHistory.shift();
-
-    intentValue = Math.max(0, Math.min(1, intent));
-    perimeterState = Math.max(0, Math.min(2, perimeterIndex));
-
-    drawDrift();
-    drawIntent();
-    drawPerimeter();
-}
-
-function drawDrift() {
-    const c = document.getElementById("driftCanvas");
-    const ctx = c.getContext("2d");
-    const w = c.width;
-    const h = c.height;
-
-    ctx.clearRect(0, 0, w, h);
-    if (driftHistory.length === 0) return;
-
-    ctx.strokeStyle = "#888";
-    ctx.beginPath();
-    driftHistory.forEach((v, i) => {
-        const x = (i / (driftHistory.length - 1 || 1)) * w;
-        const y = h - v * h;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      } catch (err) {
+        spinner.style.display = "none";
+        resultBox.textContent = "Network error submitting config.";
+        resultBox.className = "deny";
+      }
     });
-    ctx.stroke();
-}
-
-function drawIntent() {
-    const c = document.getElementById("intentCanvas");
-    const ctx = c.getContext("2d");
-    const w = c.width;
-    const h = c.height;
-
-    ctx.clearRect(0, 0, w, h);
-    const barHeight = intentValue * h;
-
-    ctx.fillStyle = "#555";
-    ctx.fillRect(0, h - barHeight, w, barHeight);
-}
-
-function drawPerimeter() {
-    const c = document.getElementById("perimeterCanvas");
-    const ctx = c.getContext("2d");
-    const w = c.width;
-    const h = c.height;
-
-    ctx.clearRect(0, 0, w, h);
-
-    ctx.strokeStyle = "#444";
-    ctx.beginPath();
-    ctx.moveTo(0, h / 2);
-    ctx.lineTo(w, h / 2);
-    ctx.stroke();
-
-    const positions = [0.1, 0.5, 0.9];
-    const x = positions[perimeterState] * w;
-
-    ctx.fillStyle = "#aaa";
-    ctx.beginPath();
-    ctx.arc(x, h / 2, 6, 0, Math.PI * 2);
-    ctx.fill();
-}
-</script>
-
+  </script>
 </body>
 </html>
