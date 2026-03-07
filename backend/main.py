@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any
 from datetime import datetime
 import uuid
+import re
 
 app = FastAPI(title="IronHalo Engine Demo")
 
@@ -20,6 +21,22 @@ class ConfigStrikeRequest(BaseModel):
 
 # In‑memory forensic log
 forensic_log: List[Dict[str, Any]] = []
+
+
+# -----------------------------
+# Helper: Parse override flag
+# -----------------------------
+def parse_override_flag(text: str) -> bool:
+    """
+    Extracts allow_override value safely.
+    Only returns True if explicitly set to true.
+    """
+    match = re.search(r"allow_override\s*=\s*(\S+)", text.lower())
+    if not match:
+        return False
+
+    value = match.group(1).strip().lower()
+    return value == "true"
 
 
 # -----------------------------
@@ -41,8 +58,9 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     if "firewall" in text and "0.0.0.0/0" in text:
         patterns.append("gcp_open_firewall")
 
-    # Universal override attempt
-    if "allow_override" in text or "override" in text:
+    # Universal override attempt (fixed)
+    override_flag = parse_override_flag(text)
+    if override_flag:
         patterns.append("universal_override_attempt")
 
     # No misconfig
