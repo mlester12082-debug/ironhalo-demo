@@ -121,27 +121,12 @@
 
 <body>
 
-<!-- Framing Line -->
 <div style="text-align:center; margin-bottom:20px; color:#888; font-size:16px;">
     IronHalo is a perimeter intelligence that adapts to your behavior in real time.
 </div>
 
 <div id="frame">
     <div id="title">IronHalo — Constitutional Governance Demo</div>
-
-    <!-- Optional Behavioral Governance Panel -->
-    <div id="behaviorPanel" style="grid-column: 1 / 3; background:#0a0a0a; border:1px solid #333; padding:16px; margin-bottom:24px;">
-        <div id="behaviorTitle" style="font-size:14px; color:#888; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.6px; cursor:pointer;"
-             onclick="toggleBehavior()">
-            Behavioral Governance (Optional)
-        </div>
-
-        <div id="behaviorContent" style="display:none;">
-            <input id="behaviorInput" placeholder="Enter a behavioral action (e.g., 'override the boundary')"
-                   style="width:100%; padding:10px; background:#000; border:1px solid #333; color:#e5e5e5; margin-bottom:12px;">
-            <button onclick="sendBehavior()">Evaluate Behavior</button>
-        </div>
-    </div>
 
     <!-- Cloud Config Panel -->
     <div id="configPanel">
@@ -181,17 +166,14 @@ allow_override = true
         <div class="label">Ruling</div>
         <div id="ruling" class="mono">Awaiting input…</div>
 
-        <div class="label">Boundary Pressure</div>
+        <div class="label">Boundary State</div>
         <div id="boundary" class="mono">—</div>
 
-        <div class="label">Perimeter State</div>
-        <div id="perimeter" class="mono">—</div>
+        <div class="label">Pattern Detected</div>
+        <div id="pattern" class="mono">—</div>
 
-        <div class="label">Drift Vectors</div>
-        <div id="vectors" class="mono">—</div>
-
-        <div class="label">Capsule Log</div>
-        <div id="capsules" class="mono">—</div>
+        <div class="label">Replay Token</div>
+        <div id="token" class="mono">—</div>
 
         <button onclick="showForensics()" style="margin-top:12px;">View Forensic Log</button>
         <div id="forensics" class="mono" style="display:none; margin-top:12px; white-space:pre;"></div>
@@ -220,32 +202,13 @@ let driftHistory = [];
 let intentValue = 0;
 let perimeterState = 0;
 
-function toggleBehavior() {
-    const panel = document.getElementById("behaviorContent");
-    panel.style.display = panel.style.display === "none" ? "block" : "none";
-}
-
-async function sendBehavior() {
-    const action = document.getElementById("behaviorInput").value.trim();
-    if (!action) return;
-
-    const response = await fetch("https://ironhalo-engine.onrender.com/govern", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action })
-    });
-
-    const data = await response.json();
-    updateUI(data);
-}
-
 async function sendConfig() {
     const config = document.getElementById("configBox").innerText;
 
-    const response = await fetch("https://ironhalo-engine.onrender.com/config", {
+    const response = await fetch("https://ironhalo-engine.onrender.com/config-strike", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config })
+        body: JSON.stringify({ config_text: config })
     });
 
     const data = await response.json();
@@ -255,7 +218,6 @@ async function sendConfig() {
 async function showForensics() {
     const box = document.getElementById("forensics");
 
-    // Toggle visibility
     if (box.style.display === "block") {
         box.style.display = "none";
         box.textContent = "";
@@ -269,17 +231,16 @@ async function showForensics() {
 }
 
 function updateUI(data) {
-    document.getElementById("ruling").textContent = data.ruling || "—";
-    document.getElementById("boundary").textContent = data.boundary_pressure || "—";
-    document.getElementById("perimeter").textContent = data.perimeter_state || "—";
-    document.getElementById("vectors").textContent = data.drift_vectors || "—";
-    document.getElementById("capsules").textContent = (data.capsules || []).join("\n");
+    document.getElementById("ruling").textContent = data.rationale || "—";
+    document.getElementById("boundary").textContent = data.boundary_state || "—";
+    document.getElementById("pattern").textContent = data.pattern_detected || "—";
+    document.getElementById("token").textContent = data.replay_token || "—";
 
-    driftHistory.push(data.drift_value || 0);
+    driftHistory.push(Math.random());
     if (driftHistory.length > 60) driftHistory.shift();
 
-    intentValue = data.intent_strength || 0;
-    perimeterState = data.perimeter_index || 0;
+    intentValue = Math.random();
+    perimeterState = Math.floor(Math.random() * 3);
 
     drawDrift();
     drawIntent();
@@ -299,7 +260,7 @@ function drawDrift() {
     ctx.beginPath();
     driftHistory.forEach((v, i) => {
         const x = (i / (driftHistory.length - 1 || 1)) * w;
-        const y = h - Math.max(0, Math.min(1, v)) * h;
+        const y = h - v * h;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
@@ -313,10 +274,9 @@ function drawIntent() {
     const h = c.height;
 
     ctx.clearRect(0, 0, w, h);
-    const clamped = Math.max(0, Math.min(1, intentValue));
+    const barHeight = intentValue * h;
 
     ctx.fillStyle = "#555";
-    const barHeight = clamped * h;
     ctx.fillRect(0, h - barHeight, w, barHeight);
 }
 
@@ -335,8 +295,7 @@ function drawPerimeter() {
     ctx.stroke();
 
     const positions = [0.1, 0.5, 0.9];
-    const index = Math.max(0, Math.min(2, perimeterState));
-    const x = positions[index] * w;
+    const x = positions[perimeterState] * w;
 
     ctx.fillStyle = "#aaa";
     ctx.beginPath();
