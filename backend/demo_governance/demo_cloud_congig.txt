@@ -1,0 +1,44 @@
+# IronCloud Universal Configuration Demo
+# This file blends AWS, Azure, and GCP styles to show that IronHalo
+# governs patterns and misconfigurations across all cloud platforms.
+
+aws_s3_bucket "patient-records" {
+    public = true
+    versioning = false
+    kms_encryption = "none"
+}
+
+aws_ec2_instance "api-gateway" {
+    instance_type = "t2.micro"
+    ssh_open = true
+    allowed_ports = [22, 80, 443, 3389]
+    public_ip = "0.0.0.0/0"
+}
+
+azure_network_security_group "core-nsg" {
+    default_action = "Allow"
+    inbound_rules = [
+        { port = 22, source = "0.0.0.0/0" },
+        { port = 3389, source = "0.0.0.0/0" }
+    ]
+    aad_mfa = false
+}
+
+azure_storage_account "records-store" {
+    secure_transfer_required = false
+    public_access = "Enabled"
+    encryption = "None"
+}
+
+gcp_service_account "api-service" {
+    roles = ["owner"]
+    token_lifetime_days = 365
+    public_ip = "0.0.0.0/0"
+}
+
+gcp_compute_firewall "main-fw" {
+    direction = "INGRESS"
+    action = "ALLOW"
+    ports = ["22", "3389", "80", "443"]
+    source_ranges = ["0.0.0.0/0"]
+}
