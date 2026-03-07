@@ -229,7 +229,7 @@ async function sendBehavior() {
     const action = document.getElementById("behaviorInput").value.trim();
     if (!action) return;
 
-    const response = await fetch("http://localhost:8000/govern", {
+    const response = await fetch("https://ironhalo-engine.onrender.com/govern", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action })
@@ -242,7 +242,7 @@ async function sendBehavior() {
 async function sendConfig() {
     const config = document.getElementById("configBox").innerText;
 
-    const response = await fetch("http://localhost:8000/config", {
+    const response = await fetch("https://ironhalo-engine.onrender.com/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ config })
@@ -262,7 +262,7 @@ async function showForensics() {
         return;
     }
 
-    const response = await fetch("http://localhost:8000/forensics");
+    const response = await fetch("https://ironhalo-engine.onrender.com/forensics");
     const data = await response.json();
     box.style.display = "block";
     box.textContent = JSON.stringify(data, null, 2);
