@@ -1,36 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IronHalo — Constitutional Governance Demo</title>
-  <link rel="stylesheet" href="style.css" />
-</head>
-
-<body>
-  <div id="app">
-    <h1>IronHalo — Constitutional Governance Demo</h1>
-
-    <p class="subtitle">
-      Paste any cloud config. IronHalo will apply constitutional governance and return:
-      <strong>ALLOW</strong>, <strong>RELAX</strong>, or <strong>BLOCK</strong>.
-    </p>
-
-    <textarea id="configInput" placeholder="Paste your config here..."></textarea>
-
-    <button id="submitBtn">Submit Config to IronHalo</button>
-
-    <div id="resultContainer" class="hidden">
-      <h2>Constitutional Ruling</h2>
-      <pre id="resultOutput"></pre>
-    </div>
-
-    <div id="errorContainer" class="hidden error-box">
-      <h2>Error</h2>
-      <pre id="errorOutput"></pre>
-    </div>
-  </div>
-
-  <script src="app.js" defer></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontend</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
