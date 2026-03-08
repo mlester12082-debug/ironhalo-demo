@@ -99,7 +99,7 @@
       spinner.style.display = "block";
 
       try {
-        const response = await fetch("/config-strike", {
+        const response = await fetch("https://ironhalo-engine.onrender.com/config-strike", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config: cleanedConfig })
