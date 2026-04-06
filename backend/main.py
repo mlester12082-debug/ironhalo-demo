@@ -46,44 +46,104 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     text = config_text.lower()
     patterns = []
 
-    # AWS
+    # -------------------------
+    # Cloud-specific patterns
+    # -------------------------
+
+    # AWS — public S3
     if "aws_s3_bucket" in text and "public-read" in text:
         patterns.append("aws_public_s3")
 
-    # Azure
+    # AWS — IAM wildcard
+    if '"action": "*"' in text or 'action = "*"' in text:
+        patterns.append("aws_iam_wildcard")
+
+    # Azure — open NSG
     if "networksecuritygroup" in text and "sourceaddressprefix" in text and '"*"' in text:
         patterns.append("azure_open_nsg")
 
-    # GCP
+    # GCP — open firewall
     if "firewall" in text and "0.0.0.0/0" in text:
         patterns.append("gcp_open_firewall")
 
-    # Universal override attempt (fixed)
+    # Terraform / universal open CIDR
+    if "0.0.0.0/0" in text:
+        patterns.append("universal_open_cidr")
+
+    # -------------------------
+    # Kubernetes / workload
+    # -------------------------
+    if "allowprivilegeescalation: true" in text or "privileged: true" in text:
+        patterns.append("k8s_priv_escalation")
+
+    # -------------------------
+    # YAML / JSON public flags
+    # -------------------------
+    if "public: true" in text:
+        patterns.append("yaml_public_flag")
+
+    if '"public": true' in text:
+        patterns.append("json_public_flag")
+
+    # -------------------------
+    # Override / intent signals
+    # -------------------------
     override_flag = parse_override_flag(text)
     if override_flag:
         patterns.append("universal_override_attempt")
 
+    if "override" in text and not override_flag:
+        patterns.append("override_intent")
+
+    # -------------------------
     # No misconfig
+    # -------------------------
     if not patterns:
         patterns.append("no_obvious_misconfig")
 
-    # Clause selection
-    if "universal_override_attempt" in patterns:
+    # -------------------------
+    # Clause selection priority
+    # -------------------------
+    # 1) Explicit override attempts
+    if "universal_override_attempt" in patterns or "override_intent" in patterns:
         clause_id = "Clause 7"
         clause_title = "Universal Override Immunity"
         decision = "DENY"
         boundary_state = "TIGHTEN"
         drift_severity = "HIGH"
-        rationale = "Detected explicit override attempt against perimeter constraints."
+        rationale = "Detected explicit or implicit override attempt against perimeter constraints."
 
-    elif any(p in patterns for p in ["aws_public_s3", "azure_open_nsg", "gcp_open_firewall"]):
-        clause_id = "Clause 3"
-        clause_title = "Public Surface Minimization"
-        decision = "DENY"
-        boundary_state = "TIGHTEN"
-        drift_severity = "MEDIUM"
-        rationale = "Detected public exposure of critical surface across one or more cloud providers."
+    # 2) High‑risk privilege / wildcard / open surface
+    elif any(
+        p in patterns
+        for p in [
+            "k8s_priv_escalation",
+            "aws_iam_wildcard",
+            "universal_open_cidr",
+            "yaml_public_flag",
+            "json_public_flag",
+            "aws_public_s3",
+            "azure_open_nsg",
+            "gcp_open_firewall",
+        ]
+    ):
+        # Specialize Kubernetes into its own clause
+        if "k8s_priv_escalation" in patterns:
+            clause_id = "Clause 5"
+            clause_title = "Workload Privilege Boundaries"
+            decision = "DENY"
+            boundary_state = "TIGHTEN"
+            drift_severity = "MEDIUM"
+            rationale = "Detected Kubernetes workload requesting privilege escalation or privileged execution."
+        else:
+            clause_id = "Clause 3"
+            clause_title = "Public Surface Minimization"
+            decision = "DENY"
+            boundary_state = "TIGHTEN"
+            drift_severity = "MEDIUM"
+            rationale = "Detected public exposure or wildcard access across one or more surfaces."
 
+    # 3) Baseline readiness
     else:
         clause_id = "Clause 1"
         clause_title = "Baseline Constitutional Readiness"
