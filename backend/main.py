@@ -58,11 +58,11 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     if '"action": "*"' in text or 'action = "*"' in text:
         patterns.append("aws_iam_wildcard")
 
-    # Azure — open NSG
-    if "networksecuritygroup" in text and "sourceaddressprefix" in text and '"*"' in text:
+    # Azure — open NSG (tightened)
+    if "networksecuritygroup" in text and "sourceaddressprefix" in text and "0.0.0.0/0" in text:
         patterns.append("azure_open_nsg")
 
-    # GCP — open firewall
+    # GCP — open firewall (tightened)
     if "firewall" in text and "0.0.0.0/0" in text:
         patterns.append("gcp_open_firewall")
 
@@ -89,11 +89,15 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # Override / intent signals
     # -------------------------
     override_flag = parse_override_flag(text)
+
+    # STRICT override intent detection (fixed)
+    override_intent_match = re.search(r"\boverride\s*[:=]\s*(true|yes|1)\b", text)
+    if override_intent_match and not override_flag:
+        patterns.append("override_intent")
+
+    # Explicit override flag = true
     if override_flag:
         patterns.append("universal_override_attempt")
-
-    if "override" in text and not override_flag:
-        patterns.append("override_intent")
 
     # -------------------------
     # No misconfig
@@ -104,6 +108,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # -------------------------
     # Clause selection priority
     # -------------------------
+
     # 1) Explicit override attempts
     if "universal_override_attempt" in patterns or "override_intent" in patterns:
         clause_id = "Clause 7"
@@ -127,7 +132,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
             "gcp_open_firewall",
         ]
     ):
-        # Specialize Kubernetes into its own clause
+        # Kubernetes gets its own clause
         if "k8s_priv_escalation" in patterns:
             clause_id = "Clause 5"
             clause_title = "Workload Privilege Boundaries"
@@ -143,7 +148,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
             drift_severity = "MEDIUM"
             rationale = "Detected public exposure or wildcard access across one or more surfaces."
 
-    # 3) Baseline readiness
+    # 3) Baseline readiness (SAFE CONFIGS)
     else:
         clause_id = "Clause 1"
         clause_title = "Baseline Constitutional Readiness"
