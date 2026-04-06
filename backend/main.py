@@ -58,11 +58,21 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     if '"action": "*"' in text or 'action = "*"' in text:
         patterns.append("aws_iam_wildcard")
 
-    # Azure — open NSG (tightened)
-    if "networksecuritygroup" in text and "sourceaddressprefix" in text and "0.0.0.0/0" in text:
-        patterns.append("azure_open_nsg")
+    # -------------------------
+    # Azure — open NSG (FIXED)
+    # Detects:
+    # - network_security_group OR networksecuritygroup
+    # - source_address_prefix OR sourceaddressprefix
+    # - "*" OR 0.0.0.0/0
+    # -------------------------
+    if ("network_security_group" in text or "networksecuritygroup" in text):
+        if ("source_address_prefix" in text or "sourceaddressprefix" in text):
+            if "*" in text or "0.0.0.0/0" in text:
+                patterns.append("azure_open_nsg")
 
+    # -------------------------
     # GCP — open firewall (tightened)
+    # -------------------------
     if "firewall" in text and "0.0.0.0/0" in text:
         patterns.append("gcp_open_firewall")
 
