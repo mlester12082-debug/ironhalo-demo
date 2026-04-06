@@ -16,6 +16,10 @@ export default function App() {
   const [forensics, setForensics] = useState([]);
   const [replay, setReplay] = useState(null);
 
+  // Optional: unauthorized change narrative + recovery
+  const [unauthorizedStory, setUnauthorizedStory] = useState(null);
+  const [recovery, setRecovery] = useState(null);
+
   const logRef = useRef(null);
 
   // Auto-scroll precedent ledger to top on new event
@@ -29,8 +33,8 @@ export default function App() {
   useEffect(() => {
     const styleSheet = document.styleSheets[0];
     if (!styleSheet) return;
-    const exists = Array.from(styleSheet.cssRules || []).some((r) =>
-      r.name === "perimeterPulse"
+    const exists = Array.from(styleSheet.cssRules || []).some(
+      (r) => r.name === "perimeterPulse"
     );
     if (!exists) {
       styleSheet.insertRule(
@@ -51,16 +55,22 @@ export default function App() {
 
     setLoading(true);
     setReplay(null);
+    setUnauthorizedStory(null);
+    setRecovery(null);
 
     try {
-      const res = await fetch("https://ironhalo-engine.onrender.com/config-strike", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config_text: config }),
-      });
+      const res = await fetch(
+        "https://ironhalo-engine.onrender.com/config-strike",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config_text: config }),
+        }
+      );
 
       const data = await res.json();
 
+      // Core fields (current backend)
       setDecision(data.decision);
       setBoundary(data.boundary_state);
       setPatterns(
@@ -74,9 +84,17 @@ export default function App() {
           ? `${data.clause_id}: ${data.clause_title}`
           : data.clause_title || data.clause_id || "—"
       );
-      setDrift(data.drift_value);
-      setIntent(data.intent_strength);
-      setPerimeterIndex(data.perimeter_index);
+      setDrift(data.drift_value ?? 0);
+      setIntent(data.intent_strength ?? 0);
+      setPerimeterIndex(data.perimeter_index ?? 1);
+
+      // Optional: unauthorized change narrative + recovery (future backend)
+      if (Array.isArray(data.story)) {
+        setUnauthorizedStory(data.story);
+      }
+      if (data.recovery) {
+        setRecovery(data.recovery);
+      }
 
       setForensics((prev) => [
         { ...data, timestamp: data.timestamp || new Date().toISOString() },
@@ -104,9 +122,21 @@ export default function App() {
         ? `${e.clause_id}: ${e.clause_title}`
         : e.clause_title || e.clause_id || "—"
     );
-    setDrift(e.drift_value);
-    setIntent(e.intent_strength);
-    setPerimeterIndex(e.perimeter_index);
+    setDrift(e.drift_value ?? 0);
+    setIntent(e.intent_strength ?? 0);
+    setPerimeterIndex(e.perimeter_index ?? 1);
+
+    // If past events ever include story/recovery, replay them too
+    if (Array.isArray(e.story)) {
+      setUnauthorizedStory(e.story);
+    } else {
+      setUnauthorizedStory(null);
+    }
+    if (e.recovery) {
+      setRecovery(e.recovery);
+    } else {
+      setRecovery(null);
+    }
   };
 
   const resetDemo = () => {
@@ -121,6 +151,8 @@ export default function App() {
     setPerimeterIndex(1);
     setForensics([]);
     setReplay(null);
+    setUnauthorizedStory(null);
+    setRecovery(null);
   };
 
   const rulingTone = decision
@@ -138,11 +170,20 @@ export default function App() {
       {/* Input / Controls */}
       <div style={styles.card}>
         <h2 style={styles.sectionLabel}>Submit Artifact for Constitutional Review</h2>
+        <p style={styles.muted}>
+          Paste <b>any cloud config</b> (Terraform, YAML, JSON, IAM, NSG, firewall, Kubernetes, policy docs).
+          Try to <b>trick the perimeter</b> with misconfigurations or override attempts.
+        </p>
         <textarea
           style={styles.textarea}
           value={config}
           onChange={(e) => setConfig(e.target.value)}
-          placeholder="Paste any cloud config or governance artifact..."
+          placeholder={`Example: 
+- Public S3 bucket
+- Azure NSG 0.0.0.0/0
+- GCP open firewall
+- Kubernetes privilege escalation
+- Any YAML/JSON you think can slip past governance...`}
         />
         <div style={styles.buttonRow}>
           <button style={styles.button} onClick={submitConfig} disabled={loading}>
@@ -160,11 +201,22 @@ export default function App() {
         <div style={{ ...styles.card, ...styles.ledgerCard }} ref={logRef}>
           <h2 style={styles.sectionLabel}>Precedent Ledger</h2>
           {forensics.length === 0 && (
-            <p style={styles.muted}>No rulings yet. Submit an artifact to establish precedent.</p>
+            <p style={styles.muted}>
+              No rulings yet. Submit an artifact to establish precedent.
+            </p>
           )}
           {forensics.map((e, i) => (
             <div key={i} style={styles.logItem} onClick={() => replayEvent(e)}>
-              <span style={{ color: e.decision === "DENY" ? "#ff6b81" : e.decision === "ALLOW" ? "#2ed573" : "#ffc312" }}>
+              <span
+                style={{
+                  color:
+                    e.decision === "DENY"
+                      ? "#ff6b81"
+                      : e.decision === "ALLOW"
+                      ? "#2ed573"
+                      : "#ffc312",
+                }}
+              >
                 [{e.decision}]
               </span>{" "}
               {e.pattern_detected}
@@ -180,7 +232,13 @@ export default function App() {
             {!decision && <p style={styles.muted}>Awaiting submission.</p>}
             {decision && (
               <>
-                <div style={{ ...styles.rulingLine, borderColor: rulingTone, color: rulingTone }}>
+                <div
+                  style={{
+                    ...styles.rulingLine,
+                    borderColor: rulingTone,
+                    color: rulingTone,
+                  }}
+                >
                   RULING: {decision}
                 </div>
                 <div style={styles.rulingSub}>
@@ -188,6 +246,9 @@ export default function App() {
                 </div>
                 <div style={styles.rulingSub}>
                   Perimeter Response: <b>{boundary}</b>
+                </div>
+                <div style={styles.rulingSub}>
+                  Pattern Detected: <b>{patterns}</b>
                 </div>
               </>
             )}
@@ -200,6 +261,15 @@ export default function App() {
             </div>
           )}
 
+          {/* Optional: Unauthorized Change Narrative */}
+          {decision && unauthorizedStory && (
+            <div style={styles.card}>
+              <h2 style={styles.sectionLabel}>Unauthorized Change Narrative</h2>
+              <pre style={styles.pre}>{unauthorizedStory.join("\n")}</pre>
+            </div>
+          )}
+
+          {/* Drift + Intent */}
           {decision && (
             <div style={styles.row}>
               <div style={styles.card}>
@@ -219,6 +289,21 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* Optional: Recovery Action */}
+          {decision && recovery && (
+            <div style={styles.card}>
+              <h2 style={styles.sectionLabel}>Recovery Action</h2>
+              <p style={styles.muted}>
+                The system executed the following stabilization step:
+              </p>
+              <pre style={styles.pre}>
+                {typeof recovery === "string"
+                  ? recovery
+                  : JSON.stringify(recovery, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
 
         {/* Perimeter + Replay */}
@@ -235,7 +320,11 @@ export default function App() {
 
           <div style={styles.card}>
             <h2 style={styles.sectionLabel}>Replay Capsule</h2>
-            {!replay && <p style={styles.muted}>Select a precedent to replay its constitutional capsule.</p>}
+            {!replay && (
+              <p style={styles.muted}>
+                Select a precedent to replay its constitutional capsule.
+              </p>
+            )}
             {replay && (
               <pre style={styles.pre}>{JSON.stringify(replay, null, 2)}</pre>
             )}
@@ -300,7 +389,7 @@ const styles = {
   },
   textarea: {
     width: "100%",
-    height: 140,
+    height: 160,
     background: "#050814",
     color: "white",
     borderRadius: 8,
@@ -382,7 +471,7 @@ const styles = {
     border: "1px solid #1b2140",
   },
   barFill: (v) => ({
-    width: `${v * 100}%`,
+    width: `${Math.max(0, Math.min(1, v)) * 100}%`,
     height: "100%",
     background: "linear-gradient(90deg, #2ed573, #ffc312, #ff4757)",
     transition: "0.3s",
