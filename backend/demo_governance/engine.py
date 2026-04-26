@@ -91,8 +91,14 @@ def detect_pattern(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def detect_config_tampering(config_text: str) -> bool:
+    """
+    Demo-scale config tampering detector.
+    This is where we wire in recognizable cloud-misconfig patterns so the
+    IronHalo demo lights up on realistic configs (S3, NSG, etc.).
+    """
     t = config_text.lower()
 
+    # Existing demo patterns
     if "allow_override = true" in t:
         return True
     if "risk_threshold = 0" in t:
@@ -102,6 +108,27 @@ def detect_config_tampering(config_text: str) -> bool:
     if "delete" in t or "remove" in t:
         return True
     if "admin" in t or "root" in t or "superuser" in t:
+        return True
+
+    # -----------------------------------------------------------------------
+    # New: Test #1 – S3 anti-forensic pattern (expiration days = 0)
+    # -----------------------------------------------------------------------
+    # Terraform / JSON / YAML variants that effectively destroy logs immediately.
+    if "expiration" in t and "days" in t and "0" in t:
+        # This is intentionally coarse: any expiration + days + 0 combo
+        # is treated as an anti-forensic configuration in the demo.
+        return True
+
+    # -----------------------------------------------------------------------
+    # New: Test #2 – Azure NSG public exposure via 'Internet' alias
+    # -----------------------------------------------------------------------
+    # We don't parse JSON structurally here; we just look for the alias
+    # in a way that matches typical NSG configs.
+    if "sourceaddressprefix" in t and "internet" in t:
+        return True
+
+    # Also catch explicit 0.0.0.0/0 exposure anywhere in the config.
+    if "0.0.0.0/0" in t:
         return True
 
     return False

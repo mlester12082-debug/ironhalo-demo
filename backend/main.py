@@ -54,24 +54,31 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     if "aws_s3_bucket" in text and "public-read" in text:
         patterns.append("aws_public_s3")
 
+    # NEW: AWS — S3 anti-forensic (expiration days = 0)
+    # Covers Terraform / JSON / YAML variants
+    if "expiration" in text and "days" in text:
+        # coarse but effective for demo: any 'days = 0' or 'days: 0' near expiration
+        if re.search(r"days\s*[:=]\s*0\b", text):
+            patterns.append("s3_anti_forensic_expiration_0")
+
     # AWS — IAM wildcard
     if '"action": "*"' in text or 'action = "*"' in text:
         patterns.append("aws_iam_wildcard")
 
     # -------------------------
-    # Azure — open NSG (FIXED)
+    # Azure — open NSG (UPDATED)
     # Detects:
     # - network_security_group OR networksecuritygroup
     # - source_address_prefix OR sourceaddressprefix
-    # - "*" OR 0.0.0.0/0
+    # - "*" OR 0.0.0.0/0 OR "Internet" alias
     # -------------------------
     if ("network_security_group" in text or "networksecuritygroup" in text):
         if ("source_address_prefix" in text or "sourceaddressprefix" in text):
-            if "*" in text or "0.0.0.0/0" in text:
+            if "*" in text or "0.0.0.0/0" in text or "internet" in text:
                 patterns.append("azure_open_nsg")
 
     # -------------------------
-    # GCP — open firewall (tightened)
+    # GCP — open firewall
     # -------------------------
     if "firewall" in text and "0.0.0.0/0" in text:
         patterns.append("gcp_open_firewall")
@@ -100,7 +107,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # -------------------------
     override_flag = parse_override_flag(text)
 
-    # STRICT override intent detection (fixed)
+    # STRICT override intent detection
     override_intent_match = re.search(r"\boverride\s*[:=]\s*(true|yes|1)\b", text)
     if override_intent_match and not override_flag:
         patterns.append("override_intent")
@@ -128,7 +135,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
         drift_severity = "HIGH"
         rationale = "Detected explicit or implicit override attempt against perimeter constraints."
 
-    # 2) High‑risk privilege / wildcard / open surface
+    # 2) High‑risk privilege / wildcard / open surface / anti-forensic
     elif any(
         p in patterns
         for p in [
@@ -140,6 +147,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
             "aws_public_s3",
             "azure_open_nsg",
             "gcp_open_firewall",
+            "s3_anti_forensic_expiration_0",
         ]
     ):
         # Kubernetes gets its own clause
@@ -156,7 +164,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
             decision = "DENY"
             boundary_state = "TIGHTEN"
             drift_severity = "MEDIUM"
-            rationale = "Detected public exposure or wildcard access across one or more surfaces."
+            rationale = "Detected public exposure, wildcard access, or anti-forensic configuration across one or more surfaces."
 
     # 3) Baseline readiness (SAFE CONFIGS)
     else:
