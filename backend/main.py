@@ -8,7 +8,6 @@ import re
 
 app = FastAPI(title="IronHalo Engine Demo")
 
-# Allow frontend to call backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,102 +18,155 @@ app.add_middleware(
 class ConfigStrikeRequest(BaseModel):
     config_text: str
 
-# In‑memory forensic log
 forensic_log: List[Dict[str, Any]] = []
 
 
 # -----------------------------
-# Helper: Parse override flag
+# Helpers
 # -----------------------------
+def strip_comments(text: str) -> str:
+    """
+    Best-effort removal of full-line and trailing comments for common formats.
+    This keeps us from firing on obvious commented-out junk.
+    """
+    cleaned_lines = []
+    for line in text.splitlines():
+        # Remove // and # comments
+        line_no_inline = re.split(r"(#|//)", line, maxsplit=1)[0]
+        if line_no_inline.strip():
+            cleaned_lines.append(line_no_inline)
+    return "\n".join(cleaned_lines)
+
+
 def parse_override_flag(text: str) -> bool:
     """
     Extracts allow_override value safely.
-    Only returns True if explicitly set to true.
+    Only returns True if explicitly set to true/yes/1 (case-insensitive).
     """
-    match = re.search(r"allow_override\s*=\s*(\S+)", text.lower())
+    match = re.search(r"\ballow_override\s*=\s*(\S+)", text, re.IGNORECASE)
     if not match:
         return False
-
     value = match.group(1).strip().lower()
-    return value == "true"
+    return value in ["true", "yes", "1"]
 
 
 # -----------------------------
 # Pattern Detection Logic
 # -----------------------------
 def detect_pattern(config_text: str) -> Dict[str, Any]:
-    text = config_text.lower()
+    # Work on original and comment-stripped versions
+    raw_text = config_text
+    text_no_comments = strip_comments(config_text)
+    text_lower = text_no_comments.lower()
+
     patterns = []
 
     # -------------------------
-    # Cloud-specific patterns
+    # AWS — S3 anti-forensic (expiration days = 0)
+    # Handles Terraform, JSON, YAML, inline maps, mixed case.
     # -------------------------
-
-    # AWS — public S3
-    if "aws_s3_bucket" in text and "public-read" in text:
-        patterns.append("aws_public_s3")
-
-    # NEW: AWS — S3 anti-forensic (expiration days = 0)
-    # Universal, whitespace-agnostic, case-insensitive
     if re.search(
         r"expiration\s*[:=]?\s*[{]?\s*[\s\S]*?days\s*[:=]\s*0\b",
-        config_text,
+        text_no_comments,
         re.IGNORECASE,
     ):
         patterns.append("s3_anti_forensic_expiration_0")
 
+    # -------------------------
+    # AWS — public S3
+    # -------------------------
+    if re.search(r"aws_s3_bucket", text_lower) and re.search(
+        r"\bpublic-read\b|\bpublic-read-write\b", text_lower
+    ):
+        patterns.append("aws_public_s3")
+
+    # -------------------------
     # AWS — IAM wildcard
-    if '"action": "*"' in text or 'action = "*"' in text:
+    # Handles JSON/HCL, spacing, tabs, newlines.
+    # -------------------------
+    if re.search(r'"action"\s*:\s*"\*"', text_no_comments, re.IGNORECASE) or re.search(
+        r"\baction\s*=\s*\"?\*\"?", text_no_comments, re.IGNORECASE
+    ):
         patterns.append("aws_iam_wildcard")
 
     # -------------------------
-    # Azure — open NSG (UPDATED)
+    # Azure — open NSG
     # Detects:
-    # - network_security_group OR networksecuritygroup
-    # - source_address_prefix OR sourceaddressprefix
-    # - "*" OR 0.0.0.0/0 OR "Internet" alias
+    # - network_security_group / networksecuritygroup
+    # - sourceAddressPrefix / source_address_prefix / sourceAddressPrefixes / source_address_prefixes
+    # - "*" or 0.0.0.0/0 or "Internet" alias (any casing, with optional spaces)
     # -------------------------
-    if ("network_security_group" in text or "networksecuritygroup" in text):
-        if ("source_address_prefix" in text or "sourceaddressprefix" in text):
-            if "*" in text or "0.0.0.0/0" in text or "internet" in text:
+    if re.search(r"network[_]?security[_]?group", text_lower):
+        if re.search(r"source[_]?address[_]?prefix(es)?", text_lower):
+            if re.search(
+                r'"\s*\*\s*"|"\s*0\.0\.0\.0/0\s*"|"\s*internet\s*"',
+                text_no_comments,
+                re.IGNORECASE,
+            ):
                 patterns.append("azure_open_nsg")
 
     # -------------------------
     # GCP — open firewall
     # -------------------------
-    if "firewall" in text and "0.0.0.0/0" in text:
+    if re.search(r"firewall", text_lower) and re.search(
+        r"0\.0\.0\.0/0", text_no_comments
+    ):
         patterns.append("gcp_open_firewall")
 
-    # Terraform / universal open CIDR
-    if "0.0.0.0/0" in text:
+    # -------------------------
+    # Universal open CIDR
+    # -------------------------
+    if re.search(r"0\.0\.0\.0/0", text_no_comments):
         patterns.append("universal_open_cidr")
 
     # -------------------------
-    # Kubernetes / workload
+    # Kubernetes — privilege escalation
+    # Handles:
+    # - privileged: true / True / "true"
+    # - allowPrivilegeEscalation: true / "TRUE"
+    # - nested under spec/template/containers
     # -------------------------
-    if "allowprivilegeescalation: true" in text or "privileged: true" in text:
+    if re.search(
+        r"privileged\s*:\s*(true|\"true\"|True|\"True\")", text_no_comments, re.IGNORECASE
+    ):
+        patterns.append("k8s_priv_escalation")
+
+    if re.search(
+        r"allowprivilegeescalation\s*:\s*(true|\"true\"|\"TRUE\"|True)",
+        text_no_comments,
+        re.IGNORECASE,
+    ):
         patterns.append("k8s_priv_escalation")
 
     # -------------------------
     # YAML / JSON public flags
+    # public: true / "true" in any casing
     # -------------------------
-    if "public: true" in text:
+    if re.search(
+        r"\bpublic\s*:\s*(true|\"true\"|True|\"True\")",
+        text_no_comments,
+        re.IGNORECASE,
+    ):
         patterns.append("yaml_public_flag")
 
-    if '"public": true' in text:
+    if re.search(
+        r'"public"\s*:\s*(true|"true"|True|"True")',
+        text_no_comments,
+        re.IGNORECASE,
+    ):
         patterns.append("json_public_flag")
 
     # -------------------------
     # Override / intent signals
     # -------------------------
-    override_flag = parse_override_flag(text)
+    override_flag = parse_override_flag(text_no_comments)
 
-    # STRICT override intent detection
-    override_intent_match = re.search(r"\boverride\s*[:=]\s*(true|yes|1)\b", text)
-    if override_intent_match and not override_flag:
+    # Explicit override intent (not just a word in a comment)
+    if re.search(
+        r"\boverride\s*[:=]\s*(true|yes|1)\b", text_no_comments, re.IGNORECASE
+    ) and not override_flag:
         patterns.append("override_intent")
 
-    # Explicit override flag = true
     if override_flag:
         patterns.append("universal_override_attempt")
 
@@ -139,8 +191,8 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # 2) High‑risk privilege / wildcard / open surface / anti-forensic
     elif any(
-        p in patterns
-        for p in [
+        p
+        in [
             "k8s_priv_escalation",
             "aws_iam_wildcard",
             "universal_open_cidr",
@@ -151,8 +203,8 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
             "gcp_open_firewall",
             "s3_anti_forensic_expiration_0",
         ]
+        for p in patterns
     ):
-        # Kubernetes gets its own clause
         if "k8s_priv_escalation" in patterns:
             clause_id = "Clause 5"
             clause_title = "Workload Privilege Boundaries"
