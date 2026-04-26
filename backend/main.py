@@ -55,11 +55,13 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
         patterns.append("aws_public_s3")
 
     # NEW: AWS — S3 anti-forensic (expiration days = 0)
-    # Covers Terraform / JSON / YAML variants
-    if "expiration" in text and "days" in text:
-        # coarse but effective for demo: any 'days = 0' or 'days: 0' near expiration
-        if re.search(r"days\s*[:=]\s*0\b", text):
-            patterns.append("s3_anti_forensic_expiration_0")
+    # Universal, whitespace-agnostic, case-insensitive
+    if re.search(
+        r"expiration\s*[:=]?\s*[{]?\s*[\s\S]*?days\s*[:=]\s*0\b",
+        config_text,
+        re.IGNORECASE,
+    ):
+        patterns.append("s3_anti_forensic_expiration_0")
 
     # AWS — IAM wildcard
     if '"action": "*"' in text or 'action = "*"' in text:
