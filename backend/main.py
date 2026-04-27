@@ -64,7 +64,6 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # -------------------------
     # AWS — S3 anti-forensic (expiration days = 0)
     # Handles Terraform, JSON, YAML, inline maps, mixed case.
-    # This is an anti-forensic pattern most scanners don't treat as critical.
     # -------------------------
     if re.search(
         r"expiration\s*[:=]?\s*[{]?\s*[\s\S]*?days\s*[:=]\s*0\b",
@@ -91,19 +90,18 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
         patterns.append("aws_iam_wildcard")
 
     # -------------------------
-    # Azure — open NSG (hardened)
+    # Azure — open NSG (hardened, quote‑agnostic)
     # Detects:
     # - source/destination address prefix (singular/plural, with/without underscores)
-    # - "*" or 0.0.0.0/0 or "Internet" or "Any" alias (any casing, with optional spaces)
-    # Does NOT rely on the presence of "network_security_group" string.
+    # - *, 0.0.0.0/0, Internet, Any (any casing, with or without quotes)
     # -------------------------
     if re.search(
         r"(source|destination)[_]?address[_]?prefix(es)?",
         text_lower,
     ):
         if re.search(
-            r'"\s*\*\s*"|"\s*0\.0\.0\.0/0\s*"|"\s*internet\s*"|"\s*any\s*"',
-            text_no_comments,
+            r"(\*|0\.0\.0\.0/0|internet|any)",
+            text_lower,
             re.IGNORECASE,
         ):
             patterns.append("azure_open_nsg")
@@ -127,7 +125,6 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # Handles:
     # - privileged: true / True / "true"
     # - allowPrivilegeEscalation: true / "TRUE"
-    # - nested under spec/template/containers
     # -------------------------
     if re.search(
         r"privileged\s*:\s*(true|\"true\"|True|\"True\")",
@@ -145,8 +142,6 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # -------------------------
     # YAML / JSON public flags
-    # public: true / "true" in any casing
-    # These often slip past generic misconfig scanners.
     # -------------------------
     if re.search(
         r"\bpublic\s*:\s*(true|\"true\"|True|\"True\")",
@@ -164,11 +159,9 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # -------------------------
     # Override / intent signals
-    # These are intent-level patterns, not just structural misconfig.
     # -------------------------
     override_flag = parse_override_flag(text_no_comments)
 
-    # Explicit override intent (not just a word in a comment)
     if re.search(
         r"\boverride\s*[:=]\s*(true|yes|1)\b", text_no_comments, re.IGNORECASE
     ) and not override_flag:
