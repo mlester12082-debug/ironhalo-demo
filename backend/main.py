@@ -6,7 +6,7 @@ from datetime import datetime
 import uuid
 import re
 
-app = FastAPI(title="IronHalo Engine Demo")
+app = FastAPI(title="IronHalo Engine Demo v3")
 
 app.add_middleware(
     CORSMiddleware,
