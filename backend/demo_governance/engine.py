@@ -120,15 +120,37 @@ def detect_config_tampering(config_text: str) -> bool:
         return True
 
     # -----------------------------------------------------------------------
-    # New: Test #2 – Azure NSG public exposure via 'Internet' alias
+    # Hardened: Azure NSG public exposure detection (alias + CIDR + arrays)
     # -----------------------------------------------------------------------
-    # We don't parse JSON structurally here; we just look for the alias
-    # in a way that matches typical NSG configs.
-    if "sourceaddressprefix" in t and "internet" in t:
+    # Normalize the text once
+    tl = t.lower()
+
+    # Public exposure aliases used by Azure NSG
+    public_aliases = [
+        "internet",
+        "any",
+        "*",
+        "0.0.0.0/0",
+    ]
+
+    # Keys Azure uses for NSG rules (singular + plural)
+    nsg_keys = [
+        "sourceaddressprefix",
+        "sourceaddressprefixes",
+        "destinationaddressprefix",
+        "destinationaddressprefixes",
+        "sourceportrange",
+        "sourceportranges",
+        "destinationportrange",
+        "destinationportranges",
+    ]
+
+    # If any NSG key appears AND any public alias appears → exposure
+    if any(k in tl for k in nsg_keys) and any(alias in tl for alias in public_aliases):
         return True
 
-    # Also catch explicit 0.0.0.0/0 exposure anywhere in the config.
-    if "0.0.0.0/0" in t:
+    # Also catch explicit 0.0.0.0/0 exposure anywhere in the config
+    if "0.0.0.0/0" in tl:
         return True
 
     return False
