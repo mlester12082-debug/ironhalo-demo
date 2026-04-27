@@ -58,6 +58,10 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     raw_text = config_text
     text_no_comments = strip_comments(config_text)
     text_lower = text_no_comments.lower()
+
+    # Strip zero-width / invisible Unicode chars
+    text_lower = re.sub(r"[\u200b\u200c\u200d\u2060\ufeff]", "", text_lower)
+
     # Collapse all whitespace to defeat multi-line / unicode whitespace evasions
     text_compact = re.sub(r"\s+", "", text_lower)
 
@@ -65,7 +69,6 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # -------------------------
     # AWS — S3 anti-forensic (expiration days = 0)
-    # Handles Terraform, JSON, YAML, inline maps, mixed case.
     # -------------------------
     if re.search(
         r"expiration\s*[:=]?\s*[{]?\s*[\s\S]*?days\s*[:=]\s*0\b",
@@ -84,7 +87,6 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # -------------------------
     # AWS — IAM wildcard
-    # Handles JSON/HCL, spacing, tabs, newlines.
     # -------------------------
     if re.search(r'"action"\s*:\s*"\*"', text_no_comments, re.IGNORECASE) or re.search(
         r"\baction\s*=\s*\"?\*\"?", text_no_comments, re.IGNORECASE
@@ -107,6 +109,15 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
             re.IGNORECASE,
         ):
             patterns.append("azure_open_nsg")
+
+    # -------------------------
+    # Azure — NSG context alias (deep nesting, non-standard keys)
+    # If we see 'securityRules' and any Internet/Any alias anywhere below,
+    # treat it as an open NSG surface.
+    # -------------------------
+    if "securityrules" in text_compact:
+        if re.search(r"(internet|any|0\.0\.0\.0/0|\*)", text_compact, re.IGNORECASE):
+            patterns.append("azure_nsg_context_alias")
 
     # -------------------------
     # GCP — open firewall
@@ -199,6 +210,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
             "json_public_flag",
             "aws_public_s3",
             "azure_open_nsg",
+            "azure_nsg_context_alias",
             "gcp_open_firewall",
             "s3_anti_forensic_expiration_0",
         ]
