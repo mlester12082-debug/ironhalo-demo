@@ -62,6 +62,26 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # Strip zero-width / invisible Unicode chars
     text_lower = re.sub(r"[\u200b\u200c\u200d\u2060\ufeff]", "", text_lower)
 
+    # Normalize common Unicode homoglyphs to ASCII
+    homoglyph_map = {
+        "і": "i",  # Cyrillic small i
+        "І": "i",  # Cyrillic capital i
+        "е": "e",
+        "Е": "e",
+        "а": "a",
+        "А": "a",
+        "о": "o",
+        "О": "o",
+        "с": "c",
+        "С": "c",
+        "р": "p",
+        "Р": "p",
+        "х": "x",
+        "Х": "x",
+    }
+    for bad, good in homoglyph_map.items():
+        text_lower = text_lower.replace(bad, good)
+
     # Collapse all whitespace to defeat multi-line / unicode whitespace evasions
     text_compact = re.sub(r"\s+", "", text_lower)
 
@@ -95,9 +115,6 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # -------------------------
     # Azure — open NSG (hardened, quote- and whitespace-agnostic)
-    # Detects:
-    # - source/destination address prefix (singular/plural, with/without underscores)
-    # - *, 0.0.0.0/0, Internet, Any (any casing, with or without quotes, even split across lines)
     # -------------------------
     if re.search(
         r"(source|destination)[_]?address[_]?prefix(es)?",
@@ -112,8 +129,6 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # -------------------------
     # Azure — NSG context alias (deep nesting, non-standard keys)
-    # If we see 'securityRules' and any Internet/Any alias anywhere below,
-    # treat it as an open NSG surface.
     # -------------------------
     if "securityrules" in text_compact:
         if re.search(r"(internet|any|0\.0\.0\.0/0|\*)", text_compact, re.IGNORECASE):
