@@ -64,6 +64,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # -------------------------
     # AWS — S3 anti-forensic (expiration days = 0)
     # Handles Terraform, JSON, YAML, inline maps, mixed case.
+    # This is an anti-forensic pattern most scanners don't treat as critical.
     # -------------------------
     if re.search(
         r"expiration\s*[:=]?\s*[{]?\s*[\s\S]*?days\s*[:=]\s*0\b",
@@ -90,20 +91,22 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
         patterns.append("aws_iam_wildcard")
 
     # -------------------------
-    # Azure — open NSG
+    # Azure — open NSG (hardened)
     # Detects:
-    # - network_security_group / networksecuritygroup
-    # - sourceAddressPrefix / source_address_prefix / sourceAddressPrefixes / source_address_prefixes
-    # - "*" or 0.0.0.0/0 or "Internet" alias (any casing, with optional spaces)
+    # - source/destination address prefix (singular/plural, with/without underscores)
+    # - "*" or 0.0.0.0/0 or "Internet" or "Any" alias (any casing, with optional spaces)
+    # Does NOT rely on the presence of "network_security_group" string.
     # -------------------------
-    if re.search(r"network[_]?security[_]?group", text_lower):
-        if re.search(r"source[_]?address[_]?prefix(es)?", text_lower):
-            if re.search(
-                r'"\s*\*\s*"|"\s*0\.0\.0\.0/0\s*"|"\s*internet\s*"',
-                text_no_comments,
-                re.IGNORECASE,
-            ):
-                patterns.append("azure_open_nsg")
+    if re.search(
+        r"(source|destination)[_]?address[_]?prefix(es)?",
+        text_lower,
+    ):
+        if re.search(
+            r'"\s*\*\s*"|"\s*0\.0\.0\.0/0\s*"|"\s*internet\s*"|"\s*any\s*"',
+            text_no_comments,
+            re.IGNORECASE,
+        ):
+            patterns.append("azure_open_nsg")
 
     # -------------------------
     # GCP — open firewall
@@ -127,7 +130,9 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # - nested under spec/template/containers
     # -------------------------
     if re.search(
-        r"privileged\s*:\s*(true|\"true\"|True|\"True\")", text_no_comments, re.IGNORECASE
+        r"privileged\s*:\s*(true|\"true\"|True|\"True\")",
+        text_no_comments,
+        re.IGNORECASE,
     ):
         patterns.append("k8s_priv_escalation")
 
@@ -141,6 +146,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     # -------------------------
     # YAML / JSON public flags
     # public: true / "true" in any casing
+    # These often slip past generic misconfig scanners.
     # -------------------------
     if re.search(
         r"\bpublic\s*:\s*(true|\"true\"|True|\"True\")",
@@ -158,6 +164,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # -------------------------
     # Override / intent signals
+    # These are intent-level patterns, not just structural misconfig.
     # -------------------------
     override_flag = parse_override_flag(text_no_comments)
 
