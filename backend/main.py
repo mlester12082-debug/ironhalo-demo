@@ -58,6 +58,8 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     raw_text = config_text
     text_no_comments = strip_comments(config_text)
     text_lower = text_no_comments.lower()
+    # Collapse all whitespace to defeat multi-line / unicode whitespace evasions
+    text_compact = re.sub(r"\s+", "", text_lower)
 
     patterns = []
 
@@ -90,10 +92,10 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
         patterns.append("aws_iam_wildcard")
 
     # -------------------------
-    # Azure — open NSG (hardened, quote‑agnostic)
+    # Azure — open NSG (hardened, quote- and whitespace-agnostic)
     # Detects:
     # - source/destination address prefix (singular/plural, with/without underscores)
-    # - *, 0.0.0.0/0, Internet, Any (any casing, with or without quotes)
+    # - *, 0.0.0.0/0, Internet, Any (any casing, with or without quotes, even split across lines)
     # -------------------------
     if re.search(
         r"(source|destination)[_]?address[_]?prefix(es)?",
@@ -101,7 +103,7 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
     ):
         if re.search(
             r"(\*|0\.0\.0\.0/0|internet|any)",
-            text_lower,
+            text_compact,
             re.IGNORECASE,
         ):
             patterns.append("azure_open_nsg")
@@ -122,9 +124,6 @@ def detect_pattern(config_text: str) -> Dict[str, Any]:
 
     # -------------------------
     # Kubernetes — privilege escalation
-    # Handles:
-    # - privileged: true / True / "true"
-    # - allowPrivilegeEscalation: true / "TRUE"
     # -------------------------
     if re.search(
         r"privileged\s*:\s*(true|\"true\"|True|\"True\")",
